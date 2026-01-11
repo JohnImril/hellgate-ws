@@ -1,0 +1,13 @@
+name = "hellgate-ws"
+main = "src/index.ts"
+compatibility_date = "2026-01-08"
+
+[durable_objects]
+bindings = [
+  { name = "GAME_ROOM", class_name = "GameRoom" },
+  { name = "GAME_DIRECTORY", class_name = "GameDirectory" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GameRoom", "GameDirectory"]

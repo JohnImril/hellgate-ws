@@ -1,2 +1,116 @@
 # hellgate-ws
-Real-time multiplayer backend built on Cloudflare Workers and Durable Objects. WebSocket gateway with room-based architecture, lobby directory, and a custom binary protocol. Designed for low-latency games and real-time applications.
+
+A real-time multiplayer backend built on **Cloudflare Workers** and **Durable Objects**.
+
+This project implements a lightweight WebSocket gateway, lobby directory, and room-based multiplayer server with a custom binary protocol.
+Originally designed for a Diablo-like game, but architecturally generic and reusable.
+
+---
+
+## Features
+
+* WebSocket gateway on Cloudflare Workers
+* Room-based multiplayer using Durable Objects
+* Central lobby / game directory
+* Custom binary protocol (no JSON over WS)
+* Deterministic room state and slot-based players
+* Zero external dependencies
+* Stateless edge entry + stateful rooms
+
+---
+
+## Durable Objects
+
+### GameDirectory
+
+* Stores active game metadata
+* Updated on room create / join / leave
+* Provides binary `GameList` response
+
+### GameRoom
+
+* One instance per game room
+* Handles:
+
+  * create / join / leave
+  * player slots
+  * message routing
+  * turn synchronization
+* Automatically cleans itself up when empty
+
+---
+
+## Protocol
+
+The server uses a **binary protocol** optimized for real-time traffic.
+
+Supported packet types:
+
+* ServerInfo / ClientInfo
+* GameList
+* CreateGame / JoinGame / LeaveGame
+* JoinAccept / JoinReject
+* Connect / Disconnect / DropPlayer
+* Message (player-to-player or broadcast)
+* Turn synchronization
+
+The protocol supports batching and versioning.
+
+---
+
+## Local Development
+
+### Requirements
+
+* Node.js 18+
+* Wrangler
+
+### Install
+
+```bash
+npm install
+```
+
+### Run locally
+
+```bash
+npm run dev
+```
+
+The server will be available at:
+
+```
+ws://127.0.0.1:8787/ws
+```
+
+---
+
+## Deployment
+
+```bash
+npm run deploy
+```
+
+Deployment uses Cloudflare Workers with Durable Objects.
+
+---
+
+## Project Status
+
+This is an **experimental / hobby project**.
+
+Not production-hardened:
+
+* No authentication
+* No rate limiting
+* No persistence beyond in-memory room state
+
+Those are intentional tradeoffs for clarity and experimentation.
+
+---
+
+## License
+
+MIT License.
+
+You are free to use, modify, and redistribute this project, including for commercial purposes.
