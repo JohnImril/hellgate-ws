@@ -31,6 +31,9 @@ type RoomState = {
 };
 
 const MAX_PLAYERS = 4;
+const MAX_INVALID_PACKETS = 2;
+const MAX_MESSAGES_PER_WINDOW = 512;
+const RATE_WINDOW_MS = 15000;
 
 export class GameRoom implements DurableObject {
 	private state: DurableObjectState;
@@ -43,6 +46,9 @@ export class GameRoom implements DurableObject {
 	);
 	private bySocket = new Map<WebSocket, Player>();
 	private lastActivity = Date.now();
+	private invalidCounts = new Map<WebSocket, number>();
+	private rateState = new Map<WebSocket, { windowStart: number; count: number }>();
+	private floodLogged = new Set<WebSocket>();
 
 	constructor(state: DurableObjectState, env: Env) {
 		this.state = state;
@@ -88,12 +94,18 @@ export class GameRoom implements DurableObject {
 		ws.addEventListener("close", () => {
 			const reason = this.closeReason.get(ws) ?? 3;
 			this.closeReason.delete(ws);
+			this.invalidCounts.delete(ws);
+			this.rateState.delete(ws);
+			this.floodLogged.delete(ws);
 			this.onSocketClose(ws, reason);
 		});
 
 		ws.addEventListener("error", () => {
 			const reason = this.closeReason.get(ws) ?? 0;
 			this.closeReason.delete(ws);
+			this.invalidCounts.delete(ws);
+			this.rateState.delete(ws);
+			this.floodLogged.delete(ws);
 			this.onSocketClose(ws, reason);
 		});
 
@@ -137,7 +149,39 @@ export class GameRoom implements DurableObject {
 
 	private onBinary(ws: WebSocket, buf: ArrayBuffer) {
 		const packets = decodeTopLevel(buf);
-		if (!packets) return;
+		if (!packets) {
+			const invalid = (this.invalidCounts.get(ws) ?? 0) + 1;
+			this.invalidCounts.set(ws, invalid);
+			if (invalid > MAX_INVALID_PACKETS) {
+				this.closeReason.set(ws, 0);
+				try {
+					ws.close(1002, "invalid packet");
+				} catch {}
+			}
+			return;
+		}
+
+		const now = Date.now();
+		const rate = this.rateState.get(ws);
+		if (!rate || now - rate.windowStart > RATE_WINDOW_MS) {
+			this.rateState.set(ws, { windowStart: now, count: packets.length });
+		} else {
+			rate.count += packets.length;
+			if (rate.count > MAX_MESSAGES_PER_WINDOW) {
+				if (!this.floodLogged.has(ws)) {
+					this.floodLogged.add(ws);
+					console.warn("[room] flood detected", {
+						count: rate.count,
+						windowMs: RATE_WINDOW_MS,
+					});
+				}
+				this.closeReason.set(ws, 0);
+				try {
+					ws.close(1008, "flood");
+				} catch {}
+				return;
+			}
+		}
 
 		for (const pkt of packets) {
 			switch (pkt.code) {
