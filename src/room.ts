@@ -7,6 +7,7 @@ import {
 	encodeConnect,
 	encodeDisconnect,
 	encodePacket,
+	MAX_FRAME_BYTES,
 } from "./packet";
 
 type Env = {
@@ -34,6 +35,11 @@ const MAX_PLAYERS = 4;
 const MAX_INVALID_PACKETS = 2;
 const MAX_MESSAGES_PER_WINDOW = 512;
 const RATE_WINDOW_MS = 15000;
+const ROOM_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
+
+function isValidRoomName(name: string) {
+	return ROOM_NAME_RE.test(name);
+}
 
 export class GameRoom implements DurableObject {
 	private state: DurableObjectState;
@@ -88,7 +94,15 @@ export class GameRoom implements DurableObject {
 		ws.addEventListener("message", (ev) => {
 			if (typeof ev.data === "string") return;
 			this.lastActivity = Date.now();
-			this.onBinary(ws, ev.data as ArrayBuffer);
+			const buf = ev.data as ArrayBuffer;
+			if (buf.byteLength > MAX_FRAME_BYTES) {
+				this.closeReason.set(ws, 0);
+				try {
+					ws.close(1009, "frame too large");
+				} catch {}
+				return;
+			}
+			this.onBinary(ws, buf);
 		});
 
 		ws.addEventListener("close", () => {
@@ -235,6 +249,14 @@ export class GameRoom implements DurableObject {
 			difficulty: number;
 		}
 	) {
+		if (!isValidRoomName(pkt.name ?? "")) {
+			this.closeReason.set(ws, 0);
+			try {
+				ws.close(1002, "invalid name");
+			} catch {}
+			return;
+		}
+
 		if (this.alreadyJoined(ws)) {
 			ws.send(
 				encodeJoinReject(
@@ -308,6 +330,14 @@ export class GameRoom implements DurableObject {
 		ws: WebSocket,
 		pkt: { cookie: number; name: string; password: string }
 	) {
+		if (!isValidRoomName(pkt.name ?? "")) {
+			this.closeReason.set(ws, 0);
+			try {
+				ws.close(1002, "invalid name");
+			} catch {}
+			return;
+		}
+
 		if (this.alreadyJoined(ws)) {
 			ws.send(
 				encodeJoinReject(
@@ -406,7 +436,16 @@ export class GameRoom implements DurableObject {
 		} catch {}
 	}
 
-	private onDrop(_ws: WebSocket, pkt: { id: number; reason: number }) {
+	private onDrop(ws: WebSocket, pkt: { id: number; reason: number }) {
+		const sender = this.bySocket.get(ws);
+		if (!sender || sender.id !== 0) {
+			this.closeReason.set(ws, 0);
+			try {
+				ws.close(1008, "not host");
+			} catch {}
+			return;
+		}
+
 		const id = pkt.id & 0xff;
 		const reason = pkt.reason >>> 0;
 

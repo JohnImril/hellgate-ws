@@ -1,6 +1,6 @@
 import { GameRoom } from "./room";
 import { GameDirectory } from "./directory";
-import { encodeServerInfo, sniffLobbyAction } from "./packet";
+import { encodeServerInfo, sniffLobbyAction, MAX_FRAME_BYTES } from "./packet";
 
 export { GameRoom, GameDirectory };
 
@@ -14,6 +14,11 @@ const MAX_PENDING_BYTES = 14 * 1024 * 1024;
 const MAX_PENDING_UNKNOWN_MESSAGES = 32;
 const MAX_PENDING_UNKNOWN_BYTES = 1 * 1024 * 1024;
 const CONNECT_TIMEOUT_MS = 15000;
+const ROOM_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
+
+function isValidRoomName(name: string) {
+	return ROOM_NAME_RE.test(name);
+}
 
 function isWsUpgrade(req: Request) {
 	const upgrade = req.headers.get("Upgrade");
@@ -216,6 +221,10 @@ export default {
 		serverWs.addEventListener("message", async (ev) => {
 			if (typeof ev.data === "string") return;
 			const buf = ev.data as ArrayBuffer;
+			if (buf.byteLength > MAX_FRAME_BYTES) {
+				closeAll(1009, "frame too large");
+				return;
+			}
 			startConnectTimeout();
 
 			if (doWs) {
@@ -225,7 +234,7 @@ export default {
 
 			const sniff = sniffLobbyAction(buf);
 			if (!sniff) {
-				enqueuePending(buf, true);
+				closeAll(1002, "invalid packet");
 				return;
 			}
 
@@ -239,10 +248,18 @@ export default {
 			}
 
 			if (sniff.create?.name) {
+				if (!isValidRoomName(sniff.create.name)) {
+					closeAll(1008, "invalid room name");
+					return;
+				}
 				await attachBridge(sniff.create.name, buf);
 				return;
 			}
 			if (sniff.join?.name) {
+				if (!isValidRoomName(sniff.join.name)) {
+					closeAll(1008, "invalid room name");
+					return;
+				}
 				await attachBridge(sniff.join.name, buf);
 				return;
 			}
