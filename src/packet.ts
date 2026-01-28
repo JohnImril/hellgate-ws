@@ -64,6 +64,13 @@ export type DecodedPacket =
 	| { code: PacketCode.Turn; turn: number; id?: number }
 	| { code: number; [k: string]: any };
 
+export const MAX_BATCH_COUNT = 256;
+export const MAX_BATCH_DEPTH = 1;
+export const MAX_TOTAL_PACKETS = 256;
+export const MAX_FRAME_BYTES = 1 * 1024 * 1024;
+export const MAX_MESSAGE_BYTES = 1 * 1024 * 1024;
+export const MAX_STRING_BYTES = 255;
+
 function u8(view: DataView, o: number) {
 	return view.getUint8(o);
 }
@@ -84,12 +91,19 @@ function pushU32LE(out: number[], v: number) {
 	out.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
 }
 
+function hasBytes(view: DataView, o: number, len: number) {
+	return o >= 0 && len >= 0 && o + len <= view.byteLength;
+}
+
 function readString(
 	view: DataView,
 	o: number
-): { value: string; next: number } {
+): { value: string; next: number } | null {
+	if (!hasBytes(view, o, 1)) return null;
 	const len = u8(view, o);
 	o += 1;
+	if (len > MAX_STRING_BYTES) return null;
+	if (!hasBytes(view, o, len)) return null;
 	const bytes = new Uint8Array(view.buffer, view.byteOffset + o, len);
 	o += len;
 	let s = "";
@@ -107,9 +121,12 @@ function writeString(out: number[], s: string) {
 function readBytes(
 	view: DataView,
 	o: number
-): { value: Uint8Array; next: number } {
+): { value: Uint8Array; next: number } | null {
+	if (!hasBytes(view, o, 4)) return null;
 	const len = u32(view, o);
 	o += 4;
+	if (len > MAX_MESSAGE_BYTES) return null;
+	if (!hasBytes(view, o, len)) return null;
 	const bytes = new Uint8Array(view.buffer, view.byteOffset + o, len);
 	o += len;
 	return { value: new Uint8Array(bytes), next: o };
@@ -124,17 +141,20 @@ function decodeSingle(
 	view: DataView,
 	offset: number
 ): { pkt: DecodedPacket; next: number } | null {
+	if (!hasBytes(view, offset, 1)) return null;
 	const code = u8(view, offset);
 	offset += 1;
 
 	switch (code) {
 		case PacketCode.ClientInfo: {
+			if (!hasBytes(view, offset, 4)) return null;
 			const version = u32(view, offset);
 			offset += 4;
 			return { pkt: { code, version }, next: offset };
 		}
 
 		case PacketCode.ServerInfo: {
+			if (!hasBytes(view, offset, 4)) return null;
 			const version = u32(view, offset);
 			offset += 4;
 			return { pkt: { code, version }, next: offset };
@@ -145,12 +165,16 @@ function decodeSingle(
 		}
 
 		case PacketCode.CreateGame: {
+			if (!hasBytes(view, offset, 4)) return null;
 			const cookie = u32(view, offset);
 			offset += 4;
 			const n1 = readString(view, offset);
+			if (!n1) return null;
 			offset = n1.next;
 			const n2 = readString(view, offset);
+			if (!n2) return null;
 			offset = n2.next;
+			if (!hasBytes(view, offset, 4)) return null;
 			const difficulty = u32(view, offset);
 			offset += 4;
 			return {
@@ -166,11 +190,14 @@ function decodeSingle(
 		}
 
 		case PacketCode.JoinGame: {
+			if (!hasBytes(view, offset, 4)) return null;
 			const cookie = u32(view, offset);
 			offset += 4;
 			const n1 = readString(view, offset);
+			if (!n1) return null;
 			offset = n1.next;
 			const n2 = readString(view, offset);
+			if (!n2) return null;
 			offset = n2.next;
 			return {
 				pkt: { code, cookie, name: n1.value, password: n2.value },
@@ -182,6 +209,7 @@ function decodeSingle(
 			return { pkt: { code }, next: offset };
 
 		case PacketCode.JoinAccept: {
+			if (!hasBytes(view, offset, 9)) return null;
 			const cookie = u32(view, offset);
 			offset += 4;
 			const index = u8(view, offset);
@@ -197,6 +225,7 @@ function decodeSingle(
 		}
 
 		case PacketCode.JoinReject: {
+			if (!hasBytes(view, offset, 5)) return null;
 			const cookie = u32(view, offset);
 			offset += 4;
 			const reason = u8(view, offset);
@@ -205,12 +234,14 @@ function decodeSingle(
 		}
 
 		case PacketCode.Connect: {
+			if (!hasBytes(view, offset, 1)) return null;
 			const id = u8(view, offset);
 			offset += 1;
 			return { pkt: { code, id }, next: offset };
 		}
 
 		case PacketCode.Disconnect: {
+			if (!hasBytes(view, offset, 5)) return null;
 			const id = u8(view, offset);
 			offset += 1;
 			const reason = u32(view, offset);
@@ -219,6 +250,7 @@ function decodeSingle(
 		}
 
 		case PacketCode.DropPlayer: {
+			if (!hasBytes(view, offset, 5)) return null;
 			const id = u8(view, offset);
 			offset += 1;
 			const reason = u32(view, offset);
@@ -227,15 +259,17 @@ function decodeSingle(
 		}
 
 		case PacketCode.Message: {
+			if (!hasBytes(view, offset, 1)) return null;
 			const id = u8(view, offset);
 			offset += 1;
 			const b = readBytes(view, offset);
+			if (!b) return null;
 			offset = b.next;
 			return { pkt: { code, id, payload: b.value }, next: offset };
 		}
 
 		case PacketCode.Turn: {
-			if (offset + 4 > view.byteLength) return null;
+			if (!hasBytes(view, offset, 4)) return null;
 			const turn = u32(view, offset);
 			offset += 4;
 			return { pkt: { code, turn }, next: offset };
@@ -248,24 +282,32 @@ function decodeSingle(
 
 function decodeFromOffsetFlat(
 	view: DataView,
-	offset: number
+	offset: number,
+	depth: number,
+	state: { total: number }
 ): { pkts: DecodedPacket[]; next: number } | null {
+	if (depth > MAX_BATCH_DEPTH) return null;
+	if (!hasBytes(view, offset, 1)) return null;
 	const code = u8(view, offset);
 
 	if (code !== PacketCode.Batch) {
 		const one = decodeSingle(view, offset);
 		if (!one) return null;
+		state.total += 1;
+		if (state.total > MAX_TOTAL_PACKETS) return null;
 		return { pkts: [one.pkt], next: one.next };
 	}
 
+	if (depth === MAX_BATCH_DEPTH) return null;
 	offset += 1;
-	if (offset + 2 > view.byteLength) return null;
+	if (!hasBytes(view, offset, 2)) return null;
 	const count = u16(view, offset);
 	offset += 2;
+	if (count > MAX_BATCH_COUNT) return null;
 
 	const out: DecodedPacket[] = [];
 	for (let i = 0; i < count; i++) {
-		const r = decodeFromOffsetFlat(view, offset);
+		const r = decodeFromOffsetFlat(view, offset, depth + 1, state);
 		if (!r) return null;
 		out.push(...r.pkts);
 		offset = r.next;
@@ -274,10 +316,15 @@ function decodeFromOffsetFlat(
 }
 
 export function decodeTopLevel(buf: ArrayBuffer): DecodedPacket[] | null {
-	const view = new DataView(buf);
-	if (view.byteLength < 1) return null;
-	const r = decodeFromOffsetFlat(view, 0);
-	return r ? r.pkts : null;
+	try {
+		const view = new DataView(buf);
+		if (view.byteLength < 1) return null;
+		const state = { total: 0 };
+		const r = decodeFromOffsetFlat(view, 0, 0, state);
+		return r ? r.pkts : null;
+	} catch {
+		return null;
+	}
 }
 
 export function encodeServerInfo(version = 1): ArrayBuffer {
