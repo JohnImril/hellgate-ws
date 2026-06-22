@@ -470,17 +470,16 @@ export class GameRoom implements DurableObject {
 		const targetId = pkt.id & 0xff;
 
 		if (targetId === 0xff) {
+			const buf = encodePacket({
+				code: PacketCode.Message,
+				id: sender.id,
+				payload: pkt.payload,
+			});
 			for (const p of this.bySocket.values()) {
 				if (p.ws === ws) continue;
 				if (p.id < 0) continue;
 				try {
-					p.ws.send(
-						encodePacket({
-							code: PacketCode.Message,
-							id: sender.id,
-							payload: pkt.payload,
-						})
-					);
+					p.ws.send(buf);
 				} catch {}
 			}
 			return;

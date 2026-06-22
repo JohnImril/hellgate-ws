@@ -129,7 +129,7 @@ function readBytes(
 	if (!hasBytes(view, o, len)) return null;
 	const bytes = new Uint8Array(view.buffer, view.byteOffset + o, len);
 	o += len;
-	return { value: new Uint8Array(bytes), next: o };
+	return { value: bytes, next: o };
 }
 
 function writeBytes(out: number[], b: Uint8Array) {
