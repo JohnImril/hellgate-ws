@@ -10,10 +10,6 @@ import {
 	MAX_FRAME_BYTES,
 } from "./packet";
 
-type Env = {
-	GAME_DIRECTORY: DurableObjectNamespace;
-};
-
 type Player = {
 	id: number;
 	ws: WebSocket;
