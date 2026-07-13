@@ -4,11 +4,6 @@ import { encodeServerInfo, sniffLobbyAction, MAX_FRAME_BYTES } from "./packet";
 
 export { GameRoom, GameDirectory };
 
-type Env = {
-	GAME_ROOM: DurableObjectNamespace;
-	GAME_DIRECTORY: DurableObjectNamespace;
-};
-
 const MAX_PENDING_MESSAGES = 256;
 const MAX_PENDING_BYTES = 14 * 1024 * 1024;
 const MAX_PENDING_UNKNOWN_MESSAGES = 32;

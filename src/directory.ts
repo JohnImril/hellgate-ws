@@ -8,8 +8,6 @@ type GameInfo = {
 	updatedAt: number;
 };
 
-type Env = {};
-
 export class GameDirectory implements DurableObject {
 	private state: DurableObjectState;
 	private games = new Map<string, GameInfo>();

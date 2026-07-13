@@ -1,12 +1,17 @@
 {
 	"compilerOptions": {
 		"target": "ES2022",
-		"lib": ["ES2022", "WebWorker"],
-		"module": "ES2022",
+		"lib": ["ES2022"],
+		"module": "Preserve",
 		"moduleResolution": "Bundler",
+		"moduleDetection": "force",
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
 		"strict": true,
+		"noUncheckedSideEffectImports": true,
+		"noEmit": true,
 		"skipLibCheck": true,
-		"types": ["@cloudflare/workers-types"]
+		"types": ["./worker-configuration.d.ts"]
 	},
 	"include": ["src/**/*.ts"]
 }
