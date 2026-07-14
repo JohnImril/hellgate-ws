@@ -17,10 +17,14 @@
 		"dev": "wrangler dev",
 		"deploy": "wrangler deploy",
 		"generate-types": "wrangler types",
-		"types": "npm run generate-types && tsc"
+		"types": "npm run generate-types && tsc && tsc -p test/tsconfig.json",
+		"test": "npm run generate-types && vitest run --maxWorkers=1 --no-isolate",
+		"test:watch": "vitest --maxWorkers=1 --no-isolate"
 	},
 	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.18.4",
 		"typescript": "^7.0.2",
+		"vitest": "^4.1.10",
 		"wrangler": "^4.110.0"
 	}
 }
