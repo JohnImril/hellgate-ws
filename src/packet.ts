@@ -112,6 +112,9 @@ function readString(
 }
 
 function writeString(out: number[], s: string) {
+	if (s.length > MAX_STRING_BYTES) {
+		throw new RangeError(`string exceeds ${MAX_STRING_BYTES} bytes`);
+	}
 	const bytes = new Uint8Array(s.length);
 	for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
 	pushU8(out, bytes.length);
@@ -133,6 +136,9 @@ function readBytes(
 }
 
 function writeBytes(out: number[], b: Uint8Array) {
+	if (b.length > MAX_MESSAGE_BYTES) {
+		throw new RangeError(`message exceeds ${MAX_MESSAGE_BYTES} bytes`);
+	}
 	pushU32LE(out, b.length);
 	for (const x of b) out.push(x);
 }
@@ -209,7 +215,7 @@ function decodeSingle(
 			return { pkt: { code }, next: offset };
 
 		case PacketCode.JoinAccept: {
-			if (!hasBytes(view, offset, 9)) return null;
+			if (!hasBytes(view, offset, 13)) return null;
 			const cookie = u32(view, offset);
 			offset += 4;
 			const index = u8(view, offset);
@@ -321,7 +327,7 @@ export function decodeTopLevel(buf: ArrayBuffer): DecodedPacket[] | null {
 		if (view.byteLength < 1) return null;
 		const state = { total: 0 };
 		const r = decodeFromOffsetFlat(view, 0, 0, state);
-		return r ? r.pkts : null;
+		return r && r.next === view.byteLength ? r.pkts : null;
 	} catch {
 		return null;
 	}

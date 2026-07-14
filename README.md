@@ -193,7 +193,15 @@ Type checking is available after dependencies are installed:
 npm run types
 ```
 
-There is no test script yet.
+Run the test suite inside the Cloudflare Workers runtime:
+
+```bash
+npm test
+```
+
+The suite covers binary protocol encoding and validation, Durable Object
+directory persistence, WebSocket gateway behavior, room lifecycle, player
+routing, rejection paths, and runtime limits.
 
 ## Deployment
 
@@ -293,9 +301,7 @@ The project is suitable as a real working base for multiplayer experimentation a
 - No authentication is implemented.
 - No production-grade authorization or identity model is implemented.
 - Basic message rate limiting exists, but there is no comprehensive anti-abuse layer.
-- There is no test suite yet.
-- There is no test script yet.
-- Binary protocol behavior needs dedicated tests.
+- Browser/WASM client compatibility is not yet covered by shared binary fixture tests.
 - Binary protocol validation should be stricter.
 - Protocol layout needs more complete documentation.
 - Lobby stale entry cleanup / TTL behavior should be improved.
@@ -316,7 +322,8 @@ The project is suitable as a real working base for multiplayer experimentation a
 - [x] Message routing
 - [x] Turn synchronization
 - [x] Basic runtime limits
-- [ ] Protocol unit tests
+- [x] Protocol unit tests
+- [x] Durable Object and WebSocket integration tests
 - [ ] CI type checking
 - [ ] Full binary protocol documentation
 - [ ] Stale lobby entry cleanup / TTL

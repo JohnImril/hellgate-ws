@@ -21,7 +21,11 @@ function isWsUpgrade(req: Request) {
 }
 
 export default {
-	async fetch(req: Request, env: Env): Promise<Response> {
+	async fetch(
+		req: Request,
+		env: Env,
+		ctx: ExecutionContext
+	): Promise<Response> {
 		const url = new URL(req.url);
 
 		if (url.pathname !== "/websocket" && url.pathname !== "/ws")
@@ -38,6 +42,7 @@ export default {
 
 		let clientVersion: number | undefined;
 		let doWs: WebSocket | null = null;
+		let bridgePromise: Promise<void> | null = null;
 		let roomName: string | null = null;
 
 		const pending: Array<ArrayBuffer> = [];
@@ -138,67 +143,74 @@ export default {
 			}
 		};
 
-		const attachBridge = async (
+		const attachBridge = (
 			name: string,
 			firstPacketToForward: ArrayBuffer
-		) => {
-			if (doWs) return;
+		): Promise<void> => {
+			if (doWs) {
+				pumpToDO(firstPacketToForward);
+				return Promise.resolve();
+			}
+
+			if (!enqueuePending(firstPacketToForward)) return Promise.resolve();
+			if (bridgePromise) return bridgePromise;
+
 			roomName = name;
 
-			const roomId = env.GAME_ROOM.idFromName(name);
-			const stub = env.GAME_ROOM.get(roomId);
+			bridgePromise = (async () => {
+				const roomId = env.GAME_ROOM.idFromName(name);
+				const stub = env.GAME_ROOM.get(roomId);
 
-			const doResp = await stub.fetch("https://do/ws", {
-				headers: { Upgrade: "websocket" },
-			});
+				const doResp = await stub.fetch("https://do/ws", {
+					headers: { Upgrade: "websocket" },
+				});
 
-			const ws = (doResp as any).webSocket as WebSocket | undefined;
-			if (!ws) {
-				pending.length = 0;
+				const ws = (doResp as any).webSocket as WebSocket | undefined;
+				if (!ws) {
+					pending.length = 0;
+					pendingBytes = 0;
+					pendingUnknownMessages = 0;
+					pendingUnknownBytes = 0;
+					closeAll(1011, "failed to create do ws");
+					return;
+				}
+
+				doWs = ws;
+				doWs.accept();
+				if (timeoutId) {
+					clearTimeout(timeoutId);
+					timeoutId = null;
+				}
+
+				doWs.addEventListener("message", (ev) => {
+					if (typeof ev.data === "string") return;
+					try {
+						serverWs.send(ev.data as ArrayBuffer);
+					} catch {
+						closeAll(1011, "client send failed");
+					}
+				});
+
+				doWs.addEventListener("close", () => closeAll(1000, "room closed"));
+				doWs.addEventListener("error", () => closeAll(1011, "room error"));
+
+				for (const b of pending.splice(0, pending.length)) {
+					pendingBytes -= b.byteLength;
+					try {
+						doWs.send(b);
+					} catch {
+						closeAll(1011, "do send failed");
+						return;
+					}
+				}
 				pendingBytes = 0;
 				pendingUnknownMessages = 0;
 				pendingUnknownBytes = 0;
-				closeAll(1011, "failed to create do ws");
-				return;
-			}
-
-			doWs = ws;
-			doWs.accept();
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-				timeoutId = null;
-			}
-
-			doWs.addEventListener("message", (ev) => {
-				if (typeof ev.data === "string") return;
-				try {
-					serverWs.send(ev.data as ArrayBuffer);
-				} catch {
-					closeAll(1011, "client send failed");
-				}
+			})().finally(() => {
+				bridgePromise = null;
 			});
 
-			doWs.addEventListener("close", () => closeAll(1000, "room closed"));
-			doWs.addEventListener("error", () => closeAll(1011, "room error"));
-
-			for (const b of pending.splice(0, pending.length)) {
-				pendingBytes -= b.byteLength;
-				try {
-					doWs.send(b);
-				} catch {
-					closeAll(1011, "do send failed");
-					return;
-				}
-			}
-			pendingBytes = 0;
-			pendingUnknownMessages = 0;
-			pendingUnknownBytes = 0;
-
-			try {
-				doWs.send(firstPacketToForward);
-			} catch {
-				closeAll(1011, "do send failed");
-			}
+			return bridgePromise;
 		};
 
 		const answerGameList = async () => {
@@ -213,7 +225,7 @@ export default {
 			}
 		};
 
-		serverWs.addEventListener("message", async (ev) => {
+		const handleMessage = async (ev: MessageEvent) => {
 			if (typeof ev.data === "string") return;
 			const buf = ev.data as ArrayBuffer;
 			if (buf.byteLength > MAX_FRAME_BYTES) {
@@ -260,6 +272,10 @@ export default {
 			}
 
 			enqueuePending(buf);
+		};
+
+		serverWs.addEventListener("message", (ev) => {
+			ctx.waitUntil(handleMessage(ev));
 		});
 
 		serverWs.addEventListener("close", () =>
