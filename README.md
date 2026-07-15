@@ -294,7 +294,7 @@ After that, each deploy can bake the correct server address into the client bund
 
 `hellgate-ws` is a working compact multiplayer backend foundation with the core online flow already implemented: WebSocket gateway, lobby directory, room lifecycle, player slots, message routing, and turn synchronization.
 
-The project is suitable as a real working base for multiplayer experimentation and further hardening. It is not production-hardened yet. Before using it in production, add tests, CI type checking, authentication, stricter protocol validation, stale room cleanup, and stronger abuse protection.
+The project is suitable as a real working base for multiplayer experimentation and further hardening. It is not production-hardened yet. Before using it in production, add authentication, stricter protocol validation, stale room cleanup, and stronger abuse protection.
 
 ## Known Limitations
 
@@ -324,7 +324,7 @@ The project is suitable as a real working base for multiplayer experimentation a
 - [x] Basic runtime limits
 - [x] Protocol unit tests
 - [x] Durable Object and WebSocket integration tests
-- [ ] CI type checking
+- [x] CI type checking and tests
 - [ ] Full binary protocol documentation
 - [ ] Stale lobby entry cleanup / TTL
 - [ ] Authentication / identity layer
