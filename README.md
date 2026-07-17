@@ -83,6 +83,9 @@ Rooms support up to 4 players. Slot `0` is treated as the host in the current im
 
 ## Binary Protocol
 
+The normative packet layout and compatibility vectors are documented in
+[docs/protocol.md](docs/protocol.md).
+
 The server uses a custom binary protocol for WebSocket traffic. It avoids JSON framing and keeps packets small for real-time traffic. The protocol is built around the limited multiplayer API / binary surface available to the browser/WASM runtime, with the server providing the missing lobby and room behavior behind that surface.
 
 Supported packet categories include:
