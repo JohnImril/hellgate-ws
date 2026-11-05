@@ -1,6 +1,6 @@
 {
 	"name": "hellgate-ws",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "Real-time multiplayer backend built on Cloudflare Workers and Durable Objects. WebSocket gateway with room-based architecture, lobby directory, and a custom binary protocol. Designed for low-latency games and real-time applications.",
 	"homepage": "https://github.com/JohnImril/hellgate-ws#readme",
 	"bugs": {
@@ -22,9 +22,9 @@
 		"test:watch": "vitest --maxWorkers=1 --no-isolate"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.18.4",
+		"@cloudflare/vitest-plugin": "^1.6.0",
 		"typescript": "^7.0.2",
-		"vitest": "^4.1.10",
-		"wrangler": "^4.110.0"
+		"vitest": "^5.1.0",
+		"wrangler": "^4.158.0"
 	}
 }
